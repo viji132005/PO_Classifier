@@ -25,6 +25,8 @@ if "image_results" not in st.session_state:
     st.session_state.image_results = []
 if "image_prompt" not in st.session_state:
     st.session_state.image_prompt = ""
+if "pending_generate" not in st.session_state:
+    st.session_state.pending_generate = False
 
 EXAMPLES = {
     "Custom": {"desc": "", "supplier": ""},
@@ -57,6 +59,8 @@ IMAGE_STYLES = [
 ]
 
 LIGHTING = ["Soft studio", "Golden hour", "Moody", "Neon", "Natural"]
+MOODS = ["Crisp", "Warm", "Playful", "Elegant", "Futuristic", "Calm"]
+COMPOSITIONS = ["Wide shot", "Close-up", "Top-down", "Rule of thirds", "Symmetric"]
 
 st.markdown(
     """
@@ -71,16 +75,32 @@ html, body, [class*="css"] {
     --accent: #2f7ff7;
     --accent-2: #10b981;
     --ink: #0f172a;
-    --muted: #64748b;
+    --muted: #475569;
     --panel: #ffffff;
     --soft: #f1f5f9;
     --border: #e2e8f0;
+    --input-bg: #ffffff;
+    --input-text: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --accent: #60a5fa;
+        --accent-2: #34d399;
+        --ink: #e2e8f0;
+        --muted: #94a3b8;
+        --panel: #0f172a;
+        --soft: #111827;
+        --border: #1f2937;
+        --input-bg: #0b1220;
+        --input-text: #e2e8f0;
+    }
 }
 
 .stApp {
-    background: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 60%),
-                radial-gradient(800px 400px at 90% 0%, #e0e7ff 0%, transparent 55%),
-                linear-gradient(180deg, #f8fafc 0%, #ffffff 40%);
+    background: radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.18) 0%, transparent 60%),
+                radial-gradient(800px 400px at 90% 0%, rgba(99, 102, 241, 0.16) 0%, transparent 55%),
+                linear-gradient(180deg, var(--soft) 0%, transparent 60%);
 }
 
 .header-wrap {
@@ -98,35 +118,24 @@ html, body, [class*="css"] {
     padding: 4px 10px;
     border-radius: 999px;
     font-size: 12px;
-    color: #0f172a;
-    background: #e2e8f0;
-    border: 1px solid #cbd5f5;
+    color: var(--ink);
+    background: var(--soft);
+    border: 1px solid var(--border);
 }
 
-.badge.green {
-    background: #dcfce7;
-    border-color: #86efac;
+.badge.green { background: #dcfce7; border-color: #86efac; color: #14532d; }
+.badge.blue { background: #dbeafe; border-color: #93c5fd; color: #1e3a8a; }
+.badge.orange { background: #ffedd5; border-color: #fdba74; color: #7c2d12; }
+.badge.red { background: #fee2e2; border-color: #fca5a5; color: #7f1d1d; }
+
+@media (prefers-color-scheme: dark) {
+    .badge.green { background: #052e16; border-color: #166534; color: #86efac; }
+    .badge.blue { background: #0b1f3a; border-color: #1d4ed8; color: #93c5fd; }
+    .badge.orange { background: #3a1c07; border-color: #ea580c; color: #fdba74; }
+    .badge.red { background: #3a0b0b; border-color: #dc2626; color: #fca5a5; }
 }
 
-.badge.blue {
-    background: #dbeafe;
-    border-color: #93c5fd;
-}
-
-.badge.orange {
-    background: #ffedd5;
-    border-color: #fdba74;
-}
-
-.badge.red {
-    background: #fee2e2;
-    border-color: #fca5a5;
-}
-
-.subtle {
-    color: var(--muted);
-    font-size: 0.95rem;
-}
+.subtle { color: var(--muted); font-size: 0.95rem; }
 
 .card {
     background: var(--panel);
@@ -137,7 +146,7 @@ html, body, [class*="css"] {
 }
 
 .metric-card {
-    background: #f8fafc;
+    background: var(--soft);
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 14px 16px;
@@ -154,7 +163,7 @@ html, body, [class*="css"] {
 .image-card {
     border-radius: 14px;
     border: 1px solid var(--border);
-    background: #ffffff;
+    background: var(--panel);
     padding: 10px;
     box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
     animation: floatIn 0.6s ease both;
@@ -165,9 +174,7 @@ html, body, [class*="css"] {
     to { opacity: 1; transform: translateY(0); }
 }
 
-.pulse {
-    animation: pulse 1.8s ease-in-out infinite;
-}
+.pulse { animation: pulse 1.8s ease-in-out infinite; }
 
 @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(47, 127, 247, 0.3); }
@@ -189,11 +196,18 @@ html, body, [class*="css"] {
     box-shadow: 0 12px 20px rgba(37, 99, 235, 0.25);
 }
 
-.stTextInput>div>div>input, .stTextArea textarea {
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    background: #ffffff;
+label, .stMarkdown, .stCaption, .stTextInput label, .stTextArea label {
+    color: var(--ink) !important;
 }
+
+.stTextInput>div>div>input, .stTextArea textarea, .stSelectbox>div>div>div, .stTextInput input {
+    border-radius: 12px !important;
+    border: 1px solid var(--border) !important;
+    background: var(--input-bg) !important;
+    color: var(--input-text) !important;
+}
+
+::placeholder { color: var(--muted) !important; }
 </style>
     """,
     unsafe_allow_html=True,
@@ -222,6 +236,75 @@ def get_openai_api_key():
         key = os.getenv("OPENAI_API_KEY")
 
     return key
+
+
+def build_prompt(subject, style, lighting, mood, composition, extra, negative):
+    prompt = f"Subject: {subject}\nStyle: {style}. Lighting: {lighting}. Mood: {mood}. Composition: {composition}."
+    if extra.strip():
+        prompt = f"{prompt} Extra: {extra.strip()}."
+    if negative.strip():
+        prompt = f"{prompt} Negative: {negative.strip()}."
+    return prompt
+
+
+def run_image_generation(api_key, prompt, size, quality, background, count, seed):
+    try:
+        from openai import OpenAI
+    except Exception:
+        st.error("OpenAI SDK not installed. Run `pip install openai` and restart the app.")
+        return None
+
+    client = OpenAI(api_key=api_key)
+    params = {
+        "model": "gpt-image-1",
+        "prompt": prompt,
+        "n": count,
+    }
+    if size != "auto":
+        params["size"] = size
+    if quality != "auto":
+        params["quality"] = quality
+    if background != "auto":
+        params["background"] = background
+    if seed:
+        params["seed"] = seed
+
+    result = client.images.generate(**params)
+    images = []
+    for item in result.data:
+        b64_json = getattr(item, "b64_json", None)
+        if not b64_json and isinstance(item, dict):
+            b64_json = item.get("b64_json")
+        if b64_json:
+            images.append(base64.b64decode(b64_json))
+
+    if images:
+        st.session_state.image_results.insert(
+            0,
+            {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "prompt": prompt,
+                "settings": {
+                    "size": size,
+                    "quality": quality,
+                    "background": background,
+                    "count": count,
+                    "seed": seed,
+                },
+                "inputs": {
+                    "subject": st.session_state.image_subject,
+                    "style": st.session_state.image_style,
+                    "lighting": st.session_state.image_lighting,
+                    "mood": st.session_state.image_mood,
+                    "composition": st.session_state.image_composition,
+                    "extra": st.session_state.image_extra,
+                    "negative": st.session_state.image_negative,
+                },
+                "images": images,
+            },
+        )
+
+    return images
 
 
 st.sidebar.title("About")
@@ -358,75 +441,65 @@ with image_tab:
 
     col_a, col_b = st.columns([2, 1], gap="large")
     with col_a:
-        image_prompt = st.text_area(
-            "Image prompt",
-            height=140,
-            placeholder="e.g., A sleek AI dashboard on a glass table, soft daylight, high-end product photography",
-            key="image_prompt",
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("Prompt Builder")
+        subject = st.text_area(
+            "Subject",
+            height=110,
+            placeholder="e.g., A sleek AI dashboard on a glass table",
+            key="image_subject",
         )
-        style = st.selectbox("Style", IMAGE_STYLES)
-        lighting = st.selectbox("Lighting", LIGHTING)
-        extra = st.text_input("Extra details (optional)", placeholder="e.g., pastel palette, minimal shadows")
+        style = st.selectbox("Style", IMAGE_STYLES, key="image_style")
+        lighting = st.selectbox("Lighting", LIGHTING, key="image_lighting")
+        mood = st.selectbox("Mood", MOODS, key="image_mood")
+        composition = st.selectbox("Composition", COMPOSITIONS, key="image_composition")
+        extra = st.text_input("Extra details (optional)", key="image_extra", placeholder="e.g., pastel palette")
+        negative = st.text_input(
+            "Negative prompt (optional)",
+            key="image_negative",
+            placeholder="e.g., text, watermark, logo",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col_b:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("Generation settings")
-        size = st.selectbox("Size", ["auto", "1024x1024", "1024x1536", "1536x1024"])
-        quality = st.selectbox("Quality", ["auto", "low", "medium", "high"])
-        background = st.selectbox("Background", ["auto", "opaque", "transparent"])
-        count = st.slider("Images", min_value=1, max_value=4, value=1)
+        st.subheader("Variation settings")
+        size = st.selectbox("Size", ["auto", "1024x1024", "1024x1536", "1536x1024"], key="image_size")
+        quality = st.selectbox("Quality", ["auto", "low", "medium", "high"], key="image_quality")
+        background = st.selectbox("Background", ["auto", "opaque", "transparent"], key="image_background")
+        count = st.slider("Images", min_value=1, max_value=4, value=1, key="image_count")
+        seed = st.text_input("Seed (optional)", key="image_seed", placeholder="e.g., 42")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    final_prompt = image_prompt.strip()
+    final_prompt = subject.strip()
     if final_prompt:
-        final_prompt = f"{final_prompt}\nStyle: {style}. Lighting: {lighting}."
-        if extra.strip():
-            final_prompt = f"{final_prompt} Details: {extra.strip()}."
+        final_prompt = build_prompt(subject, style, lighting, mood, composition, extra, negative)
+
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("Prompt preview")
+    if final_prompt:
+        st.code(final_prompt)
+    else:
+        st.caption("Add a subject to build the prompt preview.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     generate_disabled = not api_key or not final_prompt
     generate = st.button("Generate images", type="primary", disabled=generate_disabled)
 
-    if generate:
-        try:
-            from openai import OpenAI
-        except Exception:
-            st.error("OpenAI SDK not installed. Run `pip install openai` and restart the app.")
-            generate = False
+    if st.session_state.pending_generate and api_key:
+        generate = True
+        st.session_state.pending_generate = False
 
     if generate:
         with st.spinner("Generating images..."):
-            client = OpenAI(api_key=api_key)
-            params = {
-                "model": "gpt-image-1",
-                "prompt": final_prompt,
-                "n": count,
-            }
-            if size != "auto":
-                params["size"] = size
-            if quality != "auto":
-                params["quality"] = quality
-            if background != "auto":
-                params["background"] = background
-
-            result = client.images.generate(**params)
-
-        images = []
-        for item in result.data:
-            b64_json = getattr(item, "b64_json", None)
-            if not b64_json and isinstance(item, dict):
-                b64_json = item.get("b64_json")
-            if b64_json:
-                images.append(base64.b64decode(b64_json))
-
-        if images:
-            st.session_state.image_results.insert(
-                0,
-                {
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "prompt": final_prompt,
-                    "settings": {"size": size, "quality": quality, "background": background},
-                    "images": images,
-                },
+            run_image_generation(
+                api_key=api_key,
+                prompt=final_prompt,
+                size=size,
+                quality=quality,
+                background=background,
+                count=count,
+                seed=seed.strip() or None,
             )
 
     if st.session_state.image_results:
@@ -451,9 +524,49 @@ with image_tab:
                 )
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        with st.expander("Image history"):
-            for item in st.session_state.image_results[1:6]:
-                st.write(f"{item['timestamp']} · {item['prompt']}")
+        st.write("")
+        st.subheader("Image history")
+        history_cols = st.columns(2)
+        for idx, item in enumerate(st.session_state.image_results[:6]):
+            target = history_cols[idx % 2]
+            with target:
+                st.markdown("<div class='image-card'>", unsafe_allow_html=True)
+                st.caption(item["timestamp"])
+                st.image(item["images"][0], use_container_width=True)
+                st.markdown(f"**{item['prompt'][:80]}**")
+                if st.button("Reuse settings", key=f"reuse_{idx}"):
+                    inputs = item.get("inputs", {})
+                    st.session_state.image_subject = inputs.get("subject", "")
+                    st.session_state.image_style = inputs.get("style", IMAGE_STYLES[0])
+                    st.session_state.image_lighting = inputs.get("lighting", LIGHTING[0])
+                    st.session_state.image_mood = inputs.get("mood", MOODS[0])
+                    st.session_state.image_composition = inputs.get("composition", COMPOSITIONS[0])
+                    st.session_state.image_extra = inputs.get("extra", "")
+                    st.session_state.image_negative = inputs.get("negative", "")
+                    settings = item.get("settings", {})
+                    st.session_state.image_size = settings.get("size", "auto")
+                    st.session_state.image_quality = settings.get("quality", "auto")
+                    st.session_state.image_background = settings.get("background", "auto")
+                    st.session_state.image_count = settings.get("count", 1)
+                    st.session_state.image_seed = settings.get("seed", "")
+                    st.session_state.pending_generate = False
+                if st.button("Regenerate", key=f"regen_{idx}"):
+                    inputs = item.get("inputs", {})
+                    st.session_state.image_subject = inputs.get("subject", "")
+                    st.session_state.image_style = inputs.get("style", IMAGE_STYLES[0])
+                    st.session_state.image_lighting = inputs.get("lighting", LIGHTING[0])
+                    st.session_state.image_mood = inputs.get("mood", MOODS[0])
+                    st.session_state.image_composition = inputs.get("composition", COMPOSITIONS[0])
+                    st.session_state.image_extra = inputs.get("extra", "")
+                    st.session_state.image_negative = inputs.get("negative", "")
+                    settings = item.get("settings", {})
+                    st.session_state.image_size = settings.get("size", "auto")
+                    st.session_state.image_quality = settings.get("quality", "auto")
+                    st.session_state.image_background = settings.get("background", "auto")
+                    st.session_state.image_count = settings.get("count", 1)
+                    st.session_state.image_seed = settings.get("seed", "")
+                    st.session_state.pending_generate = True
+                st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.info("Generate your first image to see it here.")
 
