@@ -251,7 +251,7 @@ def run_image_generation(api_key, prompt, size, quality, background, count, seed
     try:
         from openai import OpenAI
     except Exception:
-        st.error("OpenAI SDK not installed. Run `pip install openai` and restart the app.")
+        st.error("OpenAI SDK not installed or import failed.")
         return None
 
     client = OpenAI(api_key=api_key)
@@ -262,12 +262,6 @@ def run_image_generation(api_key, prompt, size, quality, background, count, seed
     }
     if size != "auto":
         params["size"] = size
-    if quality != "auto":
-        params["quality"] = quality
-    if background != "auto":
-        params["background"] = background
-    if seed:
-        params["seed"] = seed
 
     result = client.images.generate(**params)
     images = []
