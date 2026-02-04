@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 from datetime import datetime
 
 import streamlit as st
@@ -19,6 +21,10 @@ if "last_result" not in st.session_state:
     st.session_state.last_result = None
 if "last_raw" not in st.session_state:
     st.session_state.last_raw = None
+if "image_results" not in st.session_state:
+    st.session_state.image_results = []
+if "image_prompt" not in st.session_state:
+    st.session_state.image_prompt = ""
 
 EXAMPLES = {
     "Custom": {"desc": "", "supplier": ""},
@@ -39,6 +45,18 @@ EXAMPLES = {
         "supplier": "FreshBites Catering",
     },
 }
+
+IMAGE_STYLES = [
+    "Photorealistic",
+    "Cinematic",
+    "Editorial illustration",
+    "Minimalist",
+    "3D render",
+    "Pixel art",
+    "Watercolor",
+]
+
+LIGHTING = ["Soft studio", "Golden hour", "Moody", "Neon", "Natural"]
 
 st.markdown(
     """
@@ -133,6 +151,15 @@ html, body, [class*="css"] {
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
+.image-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    padding: 10px;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+    animation: floatIn 0.6s ease both;
+}
+
 @keyframes floatIn {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -182,6 +209,21 @@ def status_for(parsed):
     return "Low confidence", "red"
 
 
+def get_openai_api_key():
+    try:
+        key = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        key = None
+
+    if not key:
+        key = st.session_state.get("openai_api_key", "").strip() or None
+
+    if not key:
+        key = os.getenv("OPENAI_API_KEY")
+
+    return key
+
+
 st.sidebar.title("About")
 st.sidebar.caption("Model")
 st.sidebar.code(MODEL)
@@ -229,7 +271,9 @@ st.markdown(
 
 st.write("")
 
-input_tab, results_tab, history_tab = st.tabs(["Input", "Results", "History"])
+input_tab, results_tab, history_tab, image_tab = st.tabs(
+    ["Input", "Results", "History", "Image Studio"]
+)
 
 with input_tab:
     left, right = st.columns([2, 1], gap="large")
@@ -292,6 +336,126 @@ with history_tab:
             )
     else:
         st.info("No history yet. Your past runs will appear here.")
+
+with image_tab:
+    st.subheader("Image Studio")
+    st.caption("Generate images with OpenAI GPT Image (gpt-image-1).")
+
+    api_key = get_openai_api_key()
+    if not api_key:
+        st.warning(
+            "No OpenAI API key found. Add `OPENAI_API_KEY` to Streamlit secrets or set it as an environment variable. "
+            "You can also paste it below for this session only."
+        )
+
+    st.text_input(
+        "OpenAI API key (session only)",
+        type="password",
+        key="openai_api_key",
+        placeholder="sk-...",
+        help="Stored only in this session. For production, use Streamlit secrets or env vars.",
+    )
+
+    col_a, col_b = st.columns([2, 1], gap="large")
+    with col_a:
+        image_prompt = st.text_area(
+            "Image prompt",
+            height=140,
+            placeholder="e.g., A sleek AI dashboard on a glass table, soft daylight, high-end product photography",
+            key="image_prompt",
+        )
+        style = st.selectbox("Style", IMAGE_STYLES)
+        lighting = st.selectbox("Lighting", LIGHTING)
+        extra = st.text_input("Extra details (optional)", placeholder="e.g., pastel palette, minimal shadows")
+
+    with col_b:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("Generation settings")
+        size = st.selectbox("Size", ["auto", "1024x1024", "1024x1536", "1536x1024"])
+        quality = st.selectbox("Quality", ["auto", "low", "medium", "high"])
+        background = st.selectbox("Background", ["auto", "opaque", "transparent"])
+        count = st.slider("Images", min_value=1, max_value=4, value=1)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    final_prompt = image_prompt.strip()
+    if final_prompt:
+        final_prompt = f"{final_prompt}\nStyle: {style}. Lighting: {lighting}."
+        if extra.strip():
+            final_prompt = f"{final_prompt} Details: {extra.strip()}."
+
+    generate_disabled = not api_key or not final_prompt
+    generate = st.button("Generate images", type="primary", disabled=generate_disabled)
+
+    if generate:
+        try:
+            from openai import OpenAI
+        except Exception:
+            st.error("OpenAI SDK not installed. Run `pip install openai` and restart the app.")
+            generate = False
+
+    if generate:
+        with st.spinner("Generating images..."):
+            client = OpenAI(api_key=api_key)
+            params = {
+                "model": "gpt-image-1",
+                "prompt": final_prompt,
+                "n": count,
+            }
+            if size != "auto":
+                params["size"] = size
+            if quality != "auto":
+                params["quality"] = quality
+            if background != "auto":
+                params["background"] = background
+
+            result = client.images.generate(**params)
+
+        images = []
+        for item in result.data:
+            b64_json = getattr(item, "b64_json", None)
+            if not b64_json and isinstance(item, dict):
+                b64_json = item.get("b64_json")
+            if b64_json:
+                images.append(base64.b64decode(b64_json))
+
+        if images:
+            st.session_state.image_results.insert(
+                0,
+                {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "prompt": final_prompt,
+                    "settings": {"size": size, "quality": quality, "background": background},
+                    "images": images,
+                },
+            )
+
+    if st.session_state.image_results:
+        latest = st.session_state.image_results[0]
+        st.subheader("Latest images")
+        st.markdown(
+            f"<div class='badge blue'>Prompt</div> {latest['prompt']}",
+            unsafe_allow_html=True,
+        )
+
+        cols = st.columns(2)
+        for idx, img in enumerate(latest["images"]):
+            target = cols[idx % 2]
+            with target:
+                st.markdown("<div class='image-card'>", unsafe_allow_html=True)
+                st.image(img, use_container_width=True)
+                st.download_button(
+                    f"Download image {idx + 1}",
+                    data=img,
+                    file_name=f"image_{idx + 1}.png",
+                    mime="image/png",
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        with st.expander("Image history"):
+            for item in st.session_state.image_results[1:6]:
+                st.write(f"{item['timestamp']} · {item['prompt']}")
+    else:
+        st.info("Generate your first image to see it here.")
 
 if "classify" in locals() and classify:
     if not po_description.strip():
