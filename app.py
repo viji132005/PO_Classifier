@@ -1,3 +1,4 @@
+
 import base64
 import json
 import os
@@ -225,7 +226,7 @@ def status_for(parsed):
 
 def get_openai_api_key():
     try:
-        key = st.secrets["OPENAI_API_KEY"]
+        key = st.secrets["GEMINI_API_KEY"]
     except Exception:
         key = None
 
@@ -233,7 +234,7 @@ def get_openai_api_key():
         key = st.session_state.get("openai_api_key", "").strip() or None
 
     if not key:
-        key = os.getenv("OPENAI_API_KEY")
+        key = os.getenv("GEMINI_API_KEY")
 
     return key
 
@@ -254,9 +255,12 @@ def run_image_generation(api_key, prompt, size, quality, background, count, seed
         st.error("OpenAI SDK not installed or import failed.")
         return None
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    )
     params = {
-        "model": "gpt-image-1",
+        "model": "imagen-3.0-generate-002",
         "prompt": prompt,
         "n": count,
     }
