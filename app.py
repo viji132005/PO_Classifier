@@ -226,17 +226,14 @@ def status_for(parsed):
 
 def get_openai_api_key():
     try:
-        key = st.secrets["GEMINI_API_KEY"]
+        key = st.secrets["OPENAI_API_KEY"]
     except Exception:
         key = None
 
     if not key:
-        key = st.session_state.get("openai_api_key", "").strip() or None
+        key = os.getenv("OPENAI_API_KEY")
 
-    if not key:
-        key = os.getenv("GEMINI_API_KEY")
-
-    return key
+    return key.strip() if key else None
 
 
 def build_prompt(subject, style, lighting, mood, composition, extra, negative):
@@ -255,17 +252,19 @@ def run_image_generation(api_key, prompt, size, quality, background, count, seed
         st.error("OpenAI SDK not installed or import failed.")
         return None
 
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    )
+    client = OpenAI(api_key=api_key)
     params = {
-        "model": "imagen-3.0-generate-002",
+        "model": "gpt-image-1",
         "prompt": prompt,
         "n": count,
+        "response_format": "b64_json",
     }
     if size != "auto":
         params["size"] = size
+    if quality != "auto":
+        params["quality"] = quality
+    if background != "auto":
+        params["background"] = background
 
     result = client.images.generate(**params)
     images = []
@@ -420,22 +419,9 @@ with history_tab:
 
 with image_tab:
     st.subheader("Image Studio")
-    st.caption("Generate images with OpenAI GPT Image (gpt-image-1).")
+    st.caption("Generate images with OpenAI Image (gpt-image-1).")
 
     api_key = get_openai_api_key()
-    if not api_key:
-        st.warning(
-            "No OpenAI API key found. Add `OPENAI_API_KEY` to Streamlit secrets or set it as an environment variable. "
-            "You can also paste it below for this session only."
-        )
-
-    st.text_input(
-        "OpenAI API key (session only)",
-        type="password",
-        key="openai_api_key",
-        placeholder="sk-...",
-        help="Stored only in this session. For production, use Streamlit secrets or env vars.",
-    )
 
     col_a, col_b = st.columns([2, 1], gap="large")
     with col_a:
@@ -572,10 +558,10 @@ if "classify" in locals() and classify:
     if not po_description.strip():
         st.warning("Please enter a PO description.")
     else:
-        with st.spinner("Classifying..."):
-            result = classify_po(po_description, supplier)
-
         try:
+            with st.spinner("Classifying..."):
+                result = classify_po(po_description, supplier)
+
             parsed = json.loads(result)
             st.session_state.last_result = parsed
             st.session_state.last_raw = None
@@ -588,9 +574,10 @@ if "classify" in locals() and classify:
                     "result": parsed,
                 },
             )
-        except Exception:
+        except Exception as exc:
             st.session_state.last_result = None
-            st.session_state.last_raw = result
+            st.session_state.last_raw = None
+            st.error(f"Classification failed: {exc}")
 
 if st.session_state.last_result or st.session_state.last_raw:
     with results_tab:
